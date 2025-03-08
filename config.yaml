@@ -1,0 +1,7 @@
+model:
+  lr: 1e-4
+  beta1: 0.9
+  beta2: 0.999
+  weight_decay: 0.01
+  batch_size: 32
+  num_epochs: 100

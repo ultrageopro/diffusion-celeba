@@ -1,5 +1,7 @@
 """Load celebA dataset and preprocess it."""
 
+from pathlib import Path
+
 import torch
 from torchvision import datasets
 from torchvision.transforms import v2
@@ -9,7 +11,7 @@ from torchvision.tv_tensors import Image
 class CelebAResized(datasets.CelebA):  # type: ignore[misc]
     def __init__(
         self,
-        root: str,
+        root: str | Path,
         split: str = "train",
         *,
         download: bool = True,
@@ -66,21 +68,3 @@ class CelebAResized(datasets.CelebA):  # type: ignore[misc]
 
         """
         return len(self.attr)
-
-    def get_loader(
-        self,
-        batch_size: int,
-        *,
-        shuffle: bool = True,
-    ) -> torch.utils.data.DataLoader["CelebAResized"]:
-        """Create and return a DataLoader for the CelebAResized dataset.
-
-        Args:
-            batch_size (int): The batch size for the DataLoader.
-            shuffle (bool): If True, shuffle the data before each epoch.
-
-        Returns:
-            torch.utils.data.DataLoader: A DataLoader for the CelebAResized dataset.
-
-        """
-        return torch.utils.data.DataLoader(self, batch_size=batch_size, shuffle=shuffle)
