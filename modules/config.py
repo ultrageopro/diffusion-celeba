@@ -14,6 +14,7 @@ class Config:
     weight_decay: float
     batch_size: int
     num_epochs: int
+    timesteps: int
 
     @classmethod
     def load(cls, path: Path | str) -> "Config":
@@ -30,4 +31,6 @@ class Config:
             path = Path(path)
         with path.open("r", encoding="utf-8") as f:
             model_params = yaml.safe_load(f)["model"]
+            model_params["lr"] = float(model_params["lr"])
+
             return cls(**model_params)

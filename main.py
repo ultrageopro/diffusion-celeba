@@ -1,9 +1,19 @@
 """Main file of the project."""
 
+import logging
+
+import torch
 from torch.utils.data import DataLoader
 
 from modules.config import Config
 from modules.loader import CelebAResized
+from modules.train import train
+
+main_logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 
 def main() -> None:
@@ -22,6 +32,14 @@ def main() -> None:
         batch_size=config.batch_size,
         shuffle=True,
     )
+    main_logger.info("Configuration loaded.\nConfiguration: %s", config)
+    main_logger.info("Dataset loaded. Dataset size: %d", len(dataset))
+
+    betas = torch.linspace(config.beta1, config.beta2, config.timesteps)
+    alphas = 1.0 - betas
+    alphas_cumprod = torch.cumprod(alphas, dim=0)
+
+    train(loader=loader, config=config, alphas_cumprod=alphas_cumprod)
 
 
 if __name__ == "__main__":
