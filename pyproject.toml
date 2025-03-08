@@ -1,0 +1,42 @@
+[project]
+name = "diffusion"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "gdown>=5.2.0",
+    "matplotlib>=3.10.1",
+    "torch>=2.6.0",
+    "torchaudio>=2.6.0",
+    "torchvision>=0.21.0",
+]
+
+[tool.ruff]
+lint.select = ["ALL"] # Enable all available linters
+
+lint.ignore = [
+    "TD002",
+    "TD003",
+    "D101",
+    "CPY",
+] # Im not sure i want to explain all of this
+
+preview = true # Enable preview features
+
+# My personal preferences
+line-length = 88
+indent-width = 4
+
+[tool.mypy] # Mypy configuration required for type checking
+python_version = "3.12"
+strict = true
+
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_unused_ignores = true
+show_error_codes = true
+ignore_missing_imports = true
+
+disable_error_code = "no-any-return"
