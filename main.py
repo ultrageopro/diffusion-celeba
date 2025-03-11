@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from modules.config import Config
 from modules.loader import MNISTResized
-from modules.test import Visualization
+from modules.test import DiffusionVisualizer
 from modules.train import train
 from modules.utils import get_beta_schedule
 
@@ -59,10 +59,10 @@ def main() -> None:
     config.betas = betas.to(device)
     config.device = device
 
-    train(
+    loss, model = train(
         loader=loader,
         config=config,
-        random_model=True,
+        random_model=False,
     )
 
     test_dataset = MNISTResized(root="./data", train=False)
@@ -72,11 +72,14 @@ def main() -> None:
         shuffle=True,
     )
 
-    visualization = Visualization("./model.pt", config)
+    visualization = DiffusionVisualizer(model, config, (28, 28))
 
-    test_image, target_image = next(iter(test_loader))
-    low_res_image, generated_image = visualization.get_image(test_image)
-    visualization.tensor_to_image(low_res_image, generated_image, target_image)
+    visualization.plot_training_metrics({"MSE Loss": loss}, save_path="assets/loss.png")
+    visualization.visualize_test_samples(
+        test_loader=test_loader,
+        save_dir="assets",
+        filename="final",
+    )
 
 
 if __name__ == "__main__":

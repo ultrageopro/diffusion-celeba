@@ -1,128 +1,147 @@
 """Train diffusion model."""
 
 import logging
+from pathlib import Path
 
 import torch
-import torch.nn.functional as torch_f
 import tqdm
-from torch import optim
-from torch.nn import MSELoss
+from torch import nn, optim
+from torch.nn import functional as torch_f
 from torch.utils.data import DataLoader
 
 from .config import Config
-from .loader import CelebAResized
+from .loader import MNISTResized
 from .model import UNet
 from .utils import add_noise
 
 
-def train(
-    loader: DataLoader[CelebAResized],
+def train(  # noqa: PLR0914
+    loader: DataLoader[MNISTResized],
     config: Config,
     *,
     random_model: bool = False,
-) -> torch.nn.Module:
+) -> tuple[list[float], UNet]:
     """Train diffusion model.
 
-    Parameters
-    ----------
-    loader : DataLoader[CelebAResized]
-        Dataloader with resized CelebA dataset.
-    config : Config
-        Configuration object.
-    random_model : bool, optional
-        If True, the model is initialized with random weights and not trained.
+    Args:
+        loader: Dataloader with resized CelebA dataset
+        config: Configuration object
+        random_model: Return untrained model if True
 
-    Returns
-    -------
-    torch.nn.Module
-        Trained model.
-    torch.device
-        device
+    Returns:
+        Trained UNet model
+        Loss history
 
-    Notes
-    -----
-    This function trains a UNet model to predict the noise in the data, given
-    the input data and the time step. The model is trained with mean squared
-    error loss and Adam optimizer.
-
-    Raises
-    ------
-        ValueError: Alphas, alphas_cumprod and device must be provided
+    Raises:
+        ValueError: If required config parameters are missing
 
     """
-    train_logger = logging.getLogger(__name__)
+    logger = logging.getLogger(__name__)
 
-    if config.device is None or config.alphas_cumprod is None:
-        msg = "Alphas, alphas_cumprod and device must be provided"
+    # Validate configuration
+    if config.alphas_cumprod is None or config.betas is None or config.device is None:
+        msg = "Missing required configuration parameters"
         raise ValueError(msg)
 
+    # Initialize model
     model = UNet().to(config.device)
-    model.train()
 
     if random_model:
-        train_logger.info("Initializing model with random weights...")
-        return model
+        logger.info("Returning random initialized model")
+        return [], model
 
-    optimizer = optim.Adam(
+    # Training setup
+    optimizer = optim.AdamW(
         model.parameters(),
         lr=config.lr,
         weight_decay=config.weight_decay,
     )
-    criterion = MSELoss()
-
-    train_logger.info("Using device: %s", config.device)
-    train_logger.info("Optimizer: %s", type(optimizer))
-    train_logger.info("Criterion: %s", type(criterion))
-    train_logger.info("Model: %s", type(model))
-
-    train_logger.info(
-        "Number of trainable parameters: %d",
-        sum(p.numel() for p in model.parameters() if p.requires_grad),
+    criterion = nn.MSELoss()
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=config.num_epochs,
     )
 
-    train_logger.info("Starting training...")
+    # Logging
+    logger.info("Training configuration:")
+    logger.info("Device: %s", config.device)
+    logger.info("Timesteps: %d", config.timesteps)
+    logger.info(
+        "Trainable params: %dK",
+        sum(p.numel() for p in model.parameters() if p.requires_grad) // 10**3,
+    )
 
+    # Training loop
+    model.train()
+    loss_history: list[float] = []
     for epoch in range(config.num_epochs):
-        iterator = tqdm.tqdm(
+        progress = tqdm.tqdm(
             loader,
-            desc=f"Epoch {epoch + 1} / {config.num_epochs}",
-            total=len(loader),
+            desc=f"Epoch {epoch + 1}/{config.num_epochs}",
+            leave=False,
         )
-        for low_res, high_res in iterator:
-            low_res_deviced, high_res_deviced = (
-                low_res.to(config.device),
-                high_res.to(config.device),
-            )
 
-            t = torch.randint(
-                0,
-                config.timesteps,
-                (low_res_deviced.size(0),),
-            ).to(config.device)  # Случайные шаги t
-            noisy_high_res, noise = add_noise(
-                high_res_deviced,
-                t,
-                config.alphas_cumprod,
-            )
-
-            optimizer.zero_grad()
-            upscaled_low_res = torch_f.interpolate(
-                low_res_deviced,
-                size=high_res_deviced.shape[2:],
+        for low_res, high_res in progress:
+            # Move data to device
+            high_res_deiviced = high_res.to(config.device)
+            low_res_interpolated = torch_f.interpolate(
+                input=low_res.to(config.device),
+                size=high_res_deiviced.shape[2:],
                 mode="bilinear",
             )
-            predicted_noise = model(
-                noisy_high_res,
-                upscaled_low_res,
-                t,
+
+            # Sample noise and timesteps
+            batch_size = low_res_interpolated.size(0)
+            t = torch.randint(0, config.timesteps, (batch_size,), device=config.device)
+
+            # Add noise to target images
+            noisy_images, noise = add_noise(
+                x=high_res_deiviced,
+                t=t,
+                alphas_cumprod=config.alphas_cumprod,
             )
-            loss = criterion(predicted_noise, noise)
+
+            # Model prediction
+            optimizer.zero_grad()
+            pred_noise = model(
+                t=t.float() / config.timesteps,  # Normalized time
+                low_res_image_interpolated=low_res_interpolated,  # Low-res as input
+                noisy_image=noisy_images,  # Noisy high-res as conditioning
+            )
+
+            # Loss calculation
+            loss = criterion(pred_noise, noise)
             loss.backward()
+
+            # Gradient clipping
+            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-            iterator.set_postfix(loss=f"{loss.item():.4f}")
+            # Update progress
+            progress.set_postfix(loss=f"{loss.item():.4f}")
+            loss_history.append(loss.item())
 
-    train_logger.info("Training complete.")
+        # Epoch end
+        scheduler.step()
+        logger.info(
+            "Epoch %d/%d | Loss: %.4f | LR: %.2e",
+            epoch + 1,
+            config.num_epochs,
+            loss.item(),
+            scheduler.get_last_lr()[0],
+        )
 
-    torch.save(model, "./model.pt")
-    return model
+    # Save final model
+    save_path = Path("./models/unet.pt")
+    save_path.parent.mkdir(exist_ok=True)
+    torch.save(
+        {
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "config": config,
+        },
+        save_path,
+    )
+    logger.info("Model saved to %s", save_path)
+
+    return loss_history, model

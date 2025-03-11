@@ -22,6 +22,8 @@ lint.ignore = [
     "TD003",
     "D101",
     "CPY",
+    "D102",
+    "D107",
 ] # Im not sure i want to explain all of this
 
 preview = true # Enable preview features

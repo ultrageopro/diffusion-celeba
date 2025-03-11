@@ -1,168 +1,247 @@
-"""Visualization."""
+"""Visualization module for diffusion models."""
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 import torch
-import torch.nn.functional as torch_f
 from matplotlib import pyplot as plt
+from torch.nn import functional as torch_f
+from torch.utils.data import DataLoader
 from torchvision import transforms
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from modules.config import Config
+from modules.loader import MNISTResized
 from modules.utils import denoise
 
 if TYPE_CHECKING:
     from modules.model import UNet
 
 
-class Visualization:
+class DiffusionVisualizer:
     def __init__(
         self,
-        model_path: str,
+        model: "UNet",
         config: Config,
+        image_size: tuple[int, int] = (128, 128),
     ) -> None:
-        """Initialize.
+        """Initialize the DiffusionVisualizer.
+
+        Args:
+            model: The UNet model used for generating high-resolution images.
+            config: Configuration object containing necessary parameters.
+            image_size: Tuple specifying the size of the images (width, height).
+
+        """
+        self.model = model
+        self.config = config
+        self.image_size = image_size
+
+        self._validate_config()
+        self._init_transforms()
+
+    def _validate_config(self) -> None:
+        """Check required configuration parameters.
 
         Raises:
-            ValueError: Alphas, alphas_cumprod and betas must be provided
+            ValueError: If required configuration parameters are missing.
 
         """
-        if (
-            config.alphas is None
-            or config.alphas_cumprod is None
-            or config.betas is None
-            or config.device is None
-        ):
-            msg = "Alphas, alphas_cumprod, device and betas must be provided"
+        required = ["alphas", "alphas_cumprod", "betas", "timesteps", "device"]
+        if any(getattr(self.config, p) is None for p in required):
+            msg = "Missing required configuration parameters"
             raise ValueError(msg)
 
-        self.model: UNet = torch.load(model_path, weights_only=False).to(config.device)
-
-        self.config = config
-        self.reverse_transforms = transforms.Compose(
-            [
-                transforms.Lambda(lambda t: t.permute(1, 2, 0)),
-                transforms.Lambda(lambda t: t.detach().cpu().numpy()),
-            ],
+    def _init_transforms(self) -> None:
+        """Initialize image transformation pipelines."""
+        self.normalize = transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225],
         )
 
-    def timestep(
+        batch_dim = 4
+        self.denormalize = transforms.Compose([
+            transforms.Lambda(lambda t: (t + 1) * 0.5),
+            transforms.Lambda(lambda t: t.squeeze(0) if t.dim() == batch_dim else t),
+            transforms.Lambda(lambda t: t.permute(1, 2, 0)),
+            transforms.Lambda(lambda t: t * 255),
+            transforms.Lambda(lambda t: t.clamp(0, 255).to(torch.uint8)),
+            transforms.Lambda(lambda t: t.cpu().numpy()),
+        ])
+
+    @torch.no_grad()
+    def sample(
         self,
-        low_res_image: torch.Tensor,
-        noise: torch.Tensor,
-        t: torch.Tensor,
-    ) -> torch.Tensor:
-        """Denoise the predicted noise.
+        low_res: torch.Tensor,
+        *,
+        return_process: bool = False,
+    ) -> np.ndarray | list[np.ndarray]:
+        """Generate high-res image from low-res input.
 
         Args:
-            low_res_image (torch.Tensor): Low-resolution input image.
-            noise (torch.Tensor): Noisy image.
-            t (torch.Tensor): Time step.
+            low_res: Input low-res image tensor [1, C, H, W]
+            return_process: Return all intermediate steps if True
 
         Returns:
-            torch.Tensor: Denoised image.
-
-        """
-        model_prediction = self.model(low_res_image, noise, t)
-        return denoise(
-            model_prediction,
-            self.config,
-            t,
-            noise,
-        )
-
-    def get_image(
-        self,
-        low_res_image: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Generate an image using the denoising process.
-
-        Args:
-            low_res_image (torch.Tensor): Low-resolution input image.
-
-        Returns:
-            torch.Tensor: Interpolated low-resolution image.
-            torch.Tensor: Denoised image.
+            Generated high-res image or list of generation steps
 
         """
         self.model.eval()
 
-        low_res_image.to(self.config.device)
-        low_res_image = low_res_image[0].unsqueeze(0)
-        random_noise = torch.normal(0, 1, (1, 1, 28, 28)).to(self.config.device)
-
-        low_res_image = torch_f.interpolate(
-            low_res_image.to(self.config.device),
-            scale_factor=2,
-            mode="bilinear",
+        # Prepare inputs
+        batch_size = low_res.size(0)
+        low_res = low_res.to(self.config.device)
+        x_t = torch.randn(
+            (batch_size, 1, *self.image_size),
+            device=self.config.device,
         )
 
-        for i in tqdm(range(self.config.timesteps - 1, -1, -1)):
-            t = (
-                torch.tensor([i])
-                .repeat_interleave(1, dim=0)
-                .long()
-                .to(self.config.device)
+        process = []
+        timesteps = list(range(self.config.timesteps))[::-1]
+
+        for t in tqdm(timesteps, desc="Sampling"):
+            t_batch = torch.full(
+                (batch_size,),
+                t,
+                device=self.config.device,
+                dtype=torch.long,
             )
-            random_noise = self.timestep(low_res_image, random_noise, t)
 
-        return low_res_image, (random_noise + 1) * 0.5
+            # Predict noise and denoise
+            pred_noise = self.model(
+                noisy_image=x_t,
+                t=t_batch / self.config.timesteps,  # Normalized time
+                low_res_image_interpolated=low_res,
+            )
+            x_t = denoise(
+                pred_noise,
+                self.config,
+                t_batch,
+                x_t,
+            )
 
-    def tensor_to_image(
+            if return_process:
+                process.append(self.denormalize(x_t.detach().clone()))
+
+        return process if return_process else self.denormalize(x_t)
+
+    def plot_results(
         self,
-        low_res_image: torch.Tensor,
-        predicted_noise: torch.Tensor,
-        target_image: torch.Tensor,
+        low_res: torch.Tensor,
+        high_res: torch.Tensor,
+        generated: np.ndarray,
+        save_path: str | None = None,
     ) -> None:
-        """Save a tensor as an image.
+        """Plot comparison of low-res, generated and target images.
 
         Args:
-            low_res_image (torch.Tensor): Low-resolution input image.
-            predicted_noise (torch.Tensor): Predicted noise.
-            target_image (torch.Tensor): Target high-resolution image.
+            low_res: Low-res input image [C, H, W]
+            high_res: Target high-res image [C, H, W]
+            generated: Generated high-res image [H, W, C]
+            save_path: Path to save the plot (optional)
 
         """
-        # Move the tensors to the correct device
-        low_res_image, predicted_noise, target_image = (
-            low_res_image.to(self.config.device),
-            predicted_noise.to(self.config.device),
-            target_image.to(self.config.device),
-        )
+        _, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-        # Unsqueeze to handle batch dimension if needed
-        target_image = target_image[0].unsqueeze(0)
+        # Low-res image
+        axes[0].imshow(self.denormalize(low_res))
+        axes[0].set_title("Low Resolution")
+        axes[0].axis("off")
 
-        # Combine images into a single tensor
-        images = torch.cat([low_res_image, -predicted_noise, target_image], dim=0)
+        # Generated image
+        axes[1].imshow(generated)
+        axes[1].set_title("Generated")
+        axes[1].axis("off")
 
-        # Create subplots
-        _, ax = plt.subplots(1, 3, figsize=(15, 5))  # 3 columns, 1 row
-        ax = ax.flatten()
+        # Target image
+        axes[2].imshow(self.denormalize(high_res))
+        axes[2].set_title("High Resolution")
+        axes[2].axis("off")
 
-        # Loop over the images and display them
-        for i in range(images.shape[0]):
-            img = self.reverse_transforms(
-                images[i],
-            )  # Reverse transforms for each image
-            ax[i].imshow(img, cmap="gray")
-            ax[i].axis("off")
-
-        plt.show()
+        if save_path:
+            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(save_path, bbox_inches="tight")
+            plt.close()
+        else:
+            plt.show()
 
     @staticmethod
-    def plot_loss(loss: list[float], save_path: str) -> None:
-        """Plot the loss over iterations.
+    def plot_training_metrics(
+        metrics: dict[str, list[float]],
+        save_path: str | None = None,
+    ) -> None:
+        """Plot training metrics.
 
         Args:
-            loss (list[float]): The list of loss values.
-            save_path (str): The path to save the plot.
+            metrics: Dictionary with metric lists
+            save_path: Optional path to save the plot
 
         """
-        plt.plot(loss)
+        plt.figure(figsize=(10, 6))
+
+        for name, values in metrics.items():
+            plt.plot(values, label=name)
+
         plt.xlabel("Iteration")
         plt.ylabel("Loss")
-        plt.savefig(save_path)
+        plt.title("Training Metrics")
+        plt.legend()
+        plt.grid(True)
 
-        plt.close()
-        plt.cla()
-        plt.clf()
+        if save_path:
+            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(save_path, bbox_inches="tight")
+            plt.close()
+        else:
+            plt.show()
+
+    def visualize_test_samples(
+        self,
+        test_loader: DataLoader[MNISTResized],
+        filename: str,
+        num_samples: int = 3,
+        save_dir: str = "results",
+    ) -> None:
+        """Visualize some test samples using the diffusion model.
+
+        Args:
+            test_loader (DataLoader[MNISTResized]): The test data loader
+            filename (str): The filename to save the visualizations
+            num_samples (int, optional): Number of samples to visualize. Defaults to 3.
+            save_dir (str, optional): Directory to save the visualizations. Defaults to "results".
+
+        """
+        test_batch, target_batch = next(iter(test_loader))
+
+        # Выбираем первые num_samples примеров
+        test_images = test_batch[:num_samples].to(self.config.device)
+        target_images = target_batch[:num_samples].to(self.config.device)
+
+        # Создаем директорию для сохранения
+        Path(save_dir).mkdir(exist_ok=True)
+
+        for i in range(num_samples):
+            # Берем один пример
+            target_img = target_images[i].unsqueeze(0)
+
+            test_img = test_images[i].unsqueeze(0)  # [1, C, H, W]
+            test_img = torch_f.interpolate(
+                test_img.to(self.config.device),
+                size=target_img.shape[2:],
+                mode="bilinear",
+            )
+
+            # Генерируем изображение
+            generated = self.sample(test_img)
+
+            if isinstance(generated, list):
+                generated = generated[-1]
+
+            # Визуализируем
+            self.plot_results(
+                low_res=test_img.squeeze(0),
+                high_res=target_img.squeeze(0),
+                generated=generated,
+                save_path=f"{save_dir}/{filename}_sample_{i + 1}.png",
+            )

@@ -16,25 +16,39 @@ def add_noise(
     """Add noise to `x` at time step `t`.
 
     Args:
-        x: The tensor to add noise to.
-        t: The time step to add noise at.
-        alphas_cumprod: The cumulative product of the alphas.
-        noise: Optional noise to add. Defaults to a random normal tensor.
+        x: The tensor to add noise to (shape: [B, C, H, W])
+        t: The time step indices (shape: [B]), must be torch.long
+        alphas_cumprod: Cumulative product of alphas (shape: [T])
+        noise: Optional noise tensor. Defaults to random normal
 
     Returns:
-        The noisy tensor `x` and the added noise.
+        Tuple of noisy tensor and generated noise
+
+    Raises:
+        TypeError: If `t` is not torch.long
+        ValueError: If noise shape does not match input shape
 
     """
+    # Validate input types
+    if t.dtype != torch.long:
+        msg = f"Time steps `t` must be long, got {t.dtype}"
+        raise TypeError(msg)
+
+    # Generate noise if not provided
     if noise is None:
         noise = torch.randn_like(x)
-    sqrt_alpha_cumprod = torch.sqrt(alphas_cumprod[t])[:, None, None, None]
-    sqrt_one_minus_alpha_cumprod = torch.sqrt(1 - alphas_cumprod[t])[
-        :,
-        None,
-        None,
-        None,
-    ]
-    return sqrt_alpha_cumprod * x + sqrt_one_minus_alpha_cumprod * noise, noise
+    elif noise.shape != x.shape:
+        msg = f"Noise shape {noise.shape} must match input shape {x.shape}"
+        raise ValueError(msg)
+
+    # Extract coefficients for all batch elements
+    sqrt_alpha_cumprod = torch.sqrt(alphas_cumprod[t]).view(-1, 1, 1, 1)
+    sqrt_one_minus_alpha_cumprod = torch.sqrt(1 - alphas_cumprod[t]).view(-1, 1, 1, 1)
+
+    # Add noise with correct broadcasting
+    noisy_x = sqrt_alpha_cumprod * x + sqrt_one_minus_alpha_cumprod * noise
+
+    return noisy_x, noise
 
 
 def denoise(
@@ -65,25 +79,24 @@ def denoise(
 
     batch_size = x_t.shape[0]
 
+    # Получаем параметры для текущего шага t
     alpha_cumprod_t = config.alphas_cumprod.gather(-1, t).view(batch_size, 1, 1, 1)
     beta_t = config.betas.gather(-1, t).view(batch_size, 1, 1, 1)
     alpha_t = 1 - beta_t
     sqrt_alpha_t = torch.sqrt(alpha_t)
     sqrt_one_minus_cumprod_alpha_t = torch.sqrt(1 - alpha_cumprod_t)
-    sqrt_beta_t = torch.sqrt(beta_t)
 
-    random_noise = (
-        torch.randn_like(x_t).to(config.device)
-        if t > 1
-        else torch.zeros_like(x_t).to(config.device)
-    )
+    # Вычисление среднего значения (mean)
+    mean = (
+        x_t - beta_t / sqrt_one_minus_cumprod_alpha_t * predicted_noise
+    ) / sqrt_alpha_t
 
-    return (
-        1
-        / sqrt_alpha_t
-        * (x_t - (1 - alpha_t) / sqrt_one_minus_cumprod_alpha_t * predicted_noise)
-        + sqrt_beta_t * random_noise
-    ).clamp(-1, 1)
+    # Добавление шума для t > 0
+    noise = torch.randn_like(x_t)
+    mask = (
+        (t > 0).float().view(-1, 1, 1, 1)
+    )  # Маска для отключения шума на последнем шаге
+    return (mean + torch.sqrt(beta_t) * noise * mask).clamp(-1, 1)
 
 
 def get_beta_schedule(
