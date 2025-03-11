@@ -6,8 +6,10 @@ import torch
 from torch.utils.data import DataLoader
 
 from modules.config import Config
-from modules.loader import CelebAResized
+from modules.loader import MNISTResized
+from modules.test import Visualization
 from modules.train import train
+from modules.utils import get_beta_schedule
 
 main_logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -26,8 +28,8 @@ def main() -> None:
 
     """
     config = Config.load("./config.yaml")
-    dataset = CelebAResized(root="./data", split="train")
-    loader: DataLoader[CelebAResized] = DataLoader(
+    dataset = MNISTResized(root="./data")
+    loader: DataLoader[MNISTResized] = DataLoader(
         dataset,
         batch_size=config.batch_size,
         shuffle=True,
@@ -35,11 +37,46 @@ def main() -> None:
     main_logger.info("Configuration loaded.\nConfiguration: %s", config)
     main_logger.info("Dataset loaded. Dataset size: %d", len(dataset))
 
-    betas = torch.linspace(config.beta1, config.beta2, config.timesteps)
-    alphas = 1.0 - betas
-    alphas_cumprod = torch.cumprod(alphas, dim=0)
+    device = torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu",
+    )
 
-    train(loader=loader, config=config, alphas_cumprod=alphas_cumprod)
+    betas = get_beta_schedule(
+        config.timesteps,
+        config.schedule_type,
+        config.beta_start,
+        config.beta_end,
+    ).to(device)
+    alphas = (1 - betas).to(device)
+    alphas_cumprod = torch.cumprod(alphas, dim=0).to(device)
+
+    config.alphas = alphas.to(device)
+    config.alphas_cumprod = alphas_cumprod.to(device)
+    config.betas = betas.to(device)
+    config.device = device
+
+    train(
+        loader=loader,
+        config=config,
+        random_model=True,
+    )
+
+    test_dataset = MNISTResized(root="./data", train=False)
+    test_loader: DataLoader[MNISTResized] = DataLoader(
+        test_dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+    )
+
+    visualization = Visualization("./model.pt", config)
+
+    test_image, target_image = next(iter(test_loader))
+    low_res_image, generated_image = visualization.get_image(test_image)
+    visualization.tensor_to_image(low_res_image, generated_image, target_image)
 
 
 if __name__ == "__main__":
