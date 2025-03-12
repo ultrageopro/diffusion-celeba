@@ -10,13 +10,14 @@ from torch.nn import functional as torch_f
 from torch.utils.data import DataLoader
 
 from .config import Config
-from .loader import MNISTResized
+from .loader import CelebAResized
 from .model import UNet
 from .utils import add_noise
 
 
 def train(  # noqa: PLR0914
-    loader: DataLoader[MNISTResized],
+    loader: DataLoader[CelebAResized],
+    test_loader: DataLoader[CelebAResized],
     config: Config,
     *,
     random_model: bool = False,
@@ -24,7 +25,8 @@ def train(  # noqa: PLR0914
     """Train diffusion model.
 
     Args:
-        loader: Dataloader with resized CelebA dataset
+        loader: Dataloader with resized MNIST dataset
+        test_loader: Dataloader with resized MNIST dataset
         config: Configuration object
         random_model: Return untrained model if True
 
@@ -56,7 +58,7 @@ def train(  # noqa: PLR0914
         lr=config.lr,
         weight_decay=config.weight_decay,
     )
-    criterion = nn.MSELoss()
+    criterion = torch.nn.MSELoss()
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
         T_max=config.num_epochs,
@@ -72,9 +74,9 @@ def train(  # noqa: PLR0914
     )
 
     # Training loop
-    model.train()
     loss_history: list[float] = []
     for epoch in range(config.num_epochs):
+        model.train()
         progress = tqdm.tqdm(
             loader,
             desc=f"Epoch {epoch + 1}/{config.num_epochs}",
@@ -83,11 +85,11 @@ def train(  # noqa: PLR0914
 
         for low_res, high_res in progress:
             # Move data to device
-            high_res_deiviced = high_res.to(config.device)
+            high_res_deviced = high_res.to(config.device)
             low_res_interpolated = torch_f.interpolate(
                 input=low_res.to(config.device),
-                size=high_res_deiviced.shape[2:],
-                mode="bilinear",
+                size=high_res_deviced.shape[2:],
+                mode="bicubic",
             )
 
             # Sample noise and timesteps
@@ -96,7 +98,7 @@ def train(  # noqa: PLR0914
 
             # Add noise to target images
             noisy_images, noise = add_noise(
-                x=high_res_deiviced,
+                x=high_res_deviced,
                 t=t,
                 alphas_cumprod=config.alphas_cumprod,
             )
@@ -119,16 +121,51 @@ def train(  # noqa: PLR0914
 
             # Update progress
             progress.set_postfix(loss=f"{loss.item():.4f}")
-            loss_history.append(loss.item())
+
+        loss_history.append(loss.item())
+
+        # Validation
+        model.eval()
+        eval_loss: list[float] = []
+        for low_res, high_res in test_loader:
+            with torch.no_grad():
+                low_res_interpolated = torch_f.interpolate(
+                    input=low_res.to(config.device),
+                    size=high_res.shape[2:],
+                    mode="bicubic",
+                )
+
+                batch_size = low_res_interpolated.size(0)
+                t = torch.randint(
+                    0,
+                    config.timesteps,
+                    (batch_size,),
+                    device=config.device,
+                )
+
+                noisy_images, noise = add_noise(
+                    x=high_res.to(config.device),
+                    t=t,
+                    alphas_cumprod=config.alphas_cumprod,
+                )
+
+                pred_noise = model(
+                    t=t.float() / config.timesteps,
+                    low_res_image_interpolated=low_res_interpolated,
+                    noisy_image=noisy_images,
+                )
+
+                loss = criterion(pred_noise, noise)
+                eval_loss.append(loss.item())
 
         # Epoch end
         scheduler.step()
         logger.info(
-            "Epoch %d/%d | Loss: %.4f | LR: %.2e",
+            "Epoch %d/%d | LR: %.2e | Eval loss: %.4f",
             epoch + 1,
             config.num_epochs,
-            loss.item(),
             scheduler.get_last_lr()[0],
+            sum(eval_loss) / len(eval_loss),
         )
 
     # Save final model

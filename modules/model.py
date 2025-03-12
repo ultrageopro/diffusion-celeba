@@ -1,4 +1,4 @@
-"""Improved Diffusion Model with Enhanced Stability (Fixed Dimensions)."""
+"""Compact Diffusion Model with Efficient Architecture."""
 
 import numpy as np
 import torch
@@ -12,93 +12,112 @@ class TimeEmbedding(nn.Module):
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
         half_dim = self.dim // 2
-        freqs = torch.exp(
-            -torch.arange(half_dim, device=t.device) * (np.log(10000) / (half_dim - 1)),
-        )
-        t = t[:, None] * freqs[None, :]
-        return torch.cat([torch.sin(t), torch.cos(t)], dim=-1)
+        emb = np.log(10000) / (half_dim - 1)
+        emb = torch.exp(-torch.arange(half_dim, device=t.device) * emb)
+        emb = t[:, None] * emb[None, :]
+        return torch.cat([torch.sin(emb), torch.cos(emb)], dim=-1)
 
 
-class ResidualBlock(nn.Module):
-    def __init__(self, in_channels: int, num_groups: int = 8) -> None:
+class ResBlock(nn.Module):
+    def __init__(self, channels: int) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
-        self.gn1 = nn.GroupNorm(num_groups, in_channels)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout2d(0.05)
-        self.conv2 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
-        self.gn2 = nn.GroupNorm(num_groups, in_channels)
+        self.dw_conv1 = nn.Conv2d(
+            channels,
+            channels,
+            kernel_size=3,
+            padding=1,
+            groups=channels,
+        )
+        self.pw_conv1 = nn.Conv2d(channels, channels * 2, kernel_size=1)
+        self.norm1 = nn.GroupNorm(4, channels * 2)
+        self.act = nn.GELU()
+
+        self.dw_conv2 = nn.Conv2d(
+            channels * 2,
+            channels * 2,
+            kernel_size=3,
+            padding=1,
+            groups=channels * 2,
+        )
+        self.pw_conv2 = nn.Conv2d(channels * 2, channels, kernel_size=1)
+        self.norm2 = nn.GroupNorm(4, channels)
+
+        self.skip = nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        residual = x
-        x = self.conv1(x)
-        x = self.gn1(x)
-        x = self.relu(x)
-        x = self.dropout(x)
-        x = self.conv2(x)
-        x = self.gn2(x)
+        residual = self.skip(x)
+        x = self.dw_conv1(x)
+        x = self.pw_conv1(x)
+        x = self.norm1(x)
+        x = self.act(x)
+
+        x = self.dw_conv2(x)
+        x = self.pw_conv2(x)
+        x = self.norm2(x)
         return x + residual
 
 
 class UNet(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, image_size: tuple[int, int] = (28, 28)) -> None:
+        """Initialize the UNet."""
         super().__init__()
-        # Time embedding now outputs 256 channels
+        # Уменьшенные embedding dimensions
         self.time_embed = nn.Sequential(
-            TimeEmbedding(256),
-            nn.Linear(256, 256),  # Increased output channels
-            nn.ReLU(),
+            TimeEmbedding(64),
+            nn.Linear(64, 64),
+            nn.GELU(),
         )
+        self.image_size = image_size
 
-        # Encoder with downsampling
+        # Оптимизированный encoder
         self.enc1 = nn.Sequential(
-            nn.Conv2d(2, 64, kernel_size=3, padding=1),
-            ResidualBlock(64),
-            nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),  # Downsample
+            nn.Conv2d(6, 32, kernel_size=3, padding=1),
+            ResBlock(32),
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
         )
+
         self.enc2 = nn.Sequential(
-            ResidualBlock(64),
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # Downsample
+            ResBlock(32),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
         )
 
-        # Bottleneck with matching channels
+        # Упрощенный bottleneck
         self.bottleneck = nn.Sequential(
-            ResidualBlock(128),
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
-            nn.GroupNorm(8, 256),
-            nn.ReLU(),
-            ResidualBlock(256),
+            ResBlock(64),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.GroupNorm(4, 64),
+            nn.GELU(),
         )
 
-        # Decoder with proper channel handling
+        # Эффективный decoder
         self.dec1 = nn.Sequential(
             nn.ConvTranspose2d(
-                256 + 128,
-                128,
+                64 + 64,
+                32,
                 kernel_size=3,
                 stride=2,
                 padding=1,
                 output_padding=1,
             ),
-            ResidualBlock(128),
+            ResBlock(32),
         )
+
         self.dec2 = nn.Sequential(
             nn.ConvTranspose2d(
-                128 + 64,
-                64,
+                32 + 32,
+                32,
                 kernel_size=3,
                 stride=2,
                 padding=1,
                 output_padding=1,
             ),
-            ResidualBlock(64),
+            ResBlock(32),
         )
 
         self.final = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(64, 1, kernel_size=3, padding=1),
-            nn.Tanh(),
+            nn.Conv2d(32, 16, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.Conv2d(16, 3, kernel_size=3, padding=1),
         )
 
     def forward(
@@ -107,27 +126,22 @@ class UNet(nn.Module):
         low_res_image_interpolated: torch.Tensor,
         t: torch.Tensor,
     ) -> torch.Tensor:
-        # Time embedding processing
-        t_emb = self.time_embed(t)  # [B, 256]
-        t_emb = t_emb[:, :, None, None]  # [B, 256, 1, 1]
+        # Time embedding
+        t_emb = self.time_embed(t).unsqueeze(-1).unsqueeze(-1)
 
         # Encoder path
-        x = torch.cat((noisy_image, low_res_image_interpolated), dim=1)
-        enc1 = self.enc1(x)  # [B, 64, H/2, W/2]
-        enc2 = self.enc2(enc1)  # [B, 128, H/4, W/4]
+        low_res_image_interpolated = torch.cat(
+            [noisy_image, low_res_image_interpolated],
+            dim=1,
+        )
+        e1 = self.enc1(low_res_image_interpolated)
+        e2 = self.enc2(e1)
 
-        # Adjust time embedding to match bottleneck
-        t_emb = torch.nn.functional.interpolate(
-            t_emb,
-            size=enc2.shape[2:],  # Match spatial dimensions
-            mode="nearest",
-        )  # [B, 256, H/4, W/4]
+        # Bottleneck c добавлением временных характеристик
+        b = self.bottleneck(e2) + t_emb
 
-        # Bottleneck with proper dimension handling
-        bottleneck = self.bottleneck(enc2) + t_emb  # [B, 256, H/4, W/4]
+        # Decoder path
+        d1 = self.dec1(torch.cat([b, e2], dim=1))
+        d2 = self.dec2(torch.cat([d1, e1], dim=1))
 
-        # Decoder path with skip connections
-        dec1 = self.dec1(torch.cat([bottleneck, enc2], dim=1))  # [B, 384, H/2, W/2]
-        dec2 = self.dec2(torch.cat([dec1, enc1], dim=1))  # [B, 128+64=192, H, W]
-
-        return self.final(dec2)
+        return self.final(d2)

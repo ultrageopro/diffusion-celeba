@@ -33,12 +33,14 @@ class CelebAResized(datasets.CelebA):  # type: ignore[misc]
             v2.Resize((64, 64), interpolation=v2.InterpolationMode.BICUBIC),
             v2.ToImage(),
             v2.ToDtype(torch.float32, scale=True),
+            v2.Lambda(lambda x: x * 2.0 - 1.0),
         ])
 
         self.target_resize_transform = v2.Compose([
             v2.Resize((128, 128), interpolation=v2.InterpolationMode.BICUBIC),
             v2.ToImage(),
             v2.ToDtype(torch.float32, scale=True),
+            v2.Lambda(lambda x: x * 2.0 - 1.0),
         ])
 
     def __getitem__(self, index: int) -> tuple[Image, Image]:

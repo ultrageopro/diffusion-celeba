@@ -11,3 +11,4 @@ models/
 .venv
 .mypy_cache
 data
+assets/

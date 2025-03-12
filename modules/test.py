@@ -1,11 +1,11 @@
 """Visualization module for diffusion models."""
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
+from numpy.typing import NDArray
 from torch.nn import functional as torch_f
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -13,28 +13,31 @@ from tqdm.auto import tqdm
 
 from modules.config import Config
 from modules.loader import MNISTResized
+from modules.model import UNet
 from modules.utils import denoise
-
-if TYPE_CHECKING:
-    from modules.model import UNet
 
 
 class DiffusionVisualizer:
     def __init__(
         self,
-        model: "UNet",
+        model_path: Path | str,
         config: Config,
         image_size: tuple[int, int] = (128, 128),
     ) -> None:
         """Initialize the DiffusionVisualizer.
 
         Args:
-            model: The UNet model used for generating high-resolution images.
+            model_path: Path to the saved model.
             config: Configuration object containing necessary parameters.
             image_size: Tuple specifying the size of the images (width, height).
 
         """
-        self.model = model
+        checkpoint = torch.load(model_path, weights_only=False)
+        self.model = UNet()
+        self.model.load_state_dict(checkpoint["model"])
+        self.model.to(config.device)
+        self.model.eval()
+
         self.config = config
         self.image_size = image_size
 
@@ -55,11 +58,6 @@ class DiffusionVisualizer:
 
     def _init_transforms(self) -> None:
         """Initialize image transformation pipelines."""
-        self.normalize = transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225],
-        )
-
         batch_dim = 4
         self.denormalize = transforms.Compose([
             transforms.Lambda(lambda t: (t + 1) * 0.5),
@@ -76,7 +74,7 @@ class DiffusionVisualizer:
         low_res: torch.Tensor,
         *,
         return_process: bool = False,
-    ) -> np.ndarray | list[np.ndarray]:
+    ) -> NDArray[np.float32] | list[NDArray[np.float32]]:
         """Generate high-res image from low-res input.
 
         Args:
@@ -87,13 +85,11 @@ class DiffusionVisualizer:
             Generated high-res image or list of generation steps
 
         """
-        self.model.eval()
-
         # Prepare inputs
         batch_size = low_res.size(0)
         low_res = low_res.to(self.config.device)
         x_t = torch.randn(
-            (batch_size, 1, *self.image_size),
+            (batch_size, 3, *self.image_size),
             device=self.config.device,
         )
 
@@ -130,33 +126,34 @@ class DiffusionVisualizer:
         self,
         low_res: torch.Tensor,
         high_res: torch.Tensor,
-        generated: np.ndarray,
+        generated: NDArray[np.float32],
         save_path: str | None = None,
     ) -> None:
         """Plot comparison of low-res, generated and target images.
 
         Args:
             low_res: Low-res input image [C, H, W]
+            low_res_interpolated: Interpolated low-res image [C, H, W]
             high_res: Target high-res image [C, H, W]
             generated: Generated high-res image [H, W, C]
             save_path: Path to save the plot (optional)
 
         """
-        _, axes = plt.subplots(1, 3, figsize=(15, 5))
+        _, axes = plt.subplots(1, 3, figsize=(16, 5))
 
         # Low-res image
         axes[0].imshow(self.denormalize(low_res))
-        axes[0].set_title("Low Resolution")
+        axes[0].set_title("Low Resolution (input, 64x64)")
         axes[0].axis("off")
 
         # Generated image
         axes[1].imshow(generated)
-        axes[1].set_title("Generated")
+        axes[1].set_title("Generated (128x128)")
         axes[1].axis("off")
 
         # Target image
         axes[2].imshow(self.denormalize(high_res))
-        axes[2].set_title("High Resolution")
+        axes[2].set_title("High Resolution (target, 128x128)")
         axes[2].axis("off")
 
         if save_path:
@@ -183,11 +180,11 @@ class DiffusionVisualizer:
         for name, values in metrics.items():
             plt.plot(values, label=name)
 
-        plt.xlabel("Iteration")
+        plt.xlabel("Epoch")
         plt.ylabel("Loss")
         plt.title("Training Metrics")
         plt.legend()
-        plt.grid(True)
+        plt.grid(visible=True)
 
         if save_path:
             Path(save_path).parent.mkdir(parents=True, exist_ok=True)
@@ -209,7 +206,7 @@ class DiffusionVisualizer:
             test_loader (DataLoader[MNISTResized]): The test data loader
             filename (str): The filename to save the visualizations
             num_samples (int, optional): Number of samples to visualize. Defaults to 3.
-            save_dir (str, optional): Directory to save the visualizations. Defaults to "results".
+            save_dir (str, optional): Directory to save the visualizations.
 
         """
         test_batch, target_batch = next(iter(test_loader))
@@ -226,14 +223,14 @@ class DiffusionVisualizer:
             target_img = target_images[i].unsqueeze(0)
 
             test_img = test_images[i].unsqueeze(0)  # [1, C, H, W]
-            test_img = torch_f.interpolate(
+            test_img_interpolated = torch_f.interpolate(
                 test_img.to(self.config.device),
                 size=target_img.shape[2:],
-                mode="bilinear",
+                mode="bicubic",
             )
 
             # Генерируем изображение
-            generated = self.sample(test_img)
+            generated = self.sample(test_img_interpolated)
 
             if isinstance(generated, list):
                 generated = generated[-1]

@@ -1,12 +1,13 @@
 """Main file of the project."""
 
 import logging
+from argparse import ArgumentParser
 
 import torch
 from torch.utils.data import DataLoader
 
 from modules.config import Config
-from modules.loader import MNISTResized
+from modules.loader import CelebAResized
 from modules.test import DiffusionVisualizer
 from modules.train import train
 from modules.utils import get_beta_schedule
@@ -15,6 +16,13 @@ main_logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
+parser = ArgumentParser()
+parser.add_argument(
+    "--test",
+    action="store_true",
+    help="Load model and test it",
 )
 
 
@@ -28,12 +36,20 @@ def main() -> None:
 
     """
     config = Config.load("./config.yaml")
-    dataset = MNISTResized(root="./data")
-    loader: DataLoader[MNISTResized] = DataLoader(
+    args = parser.parse_args()
+    dataset = CelebAResized(root="./data", split="train", download=True)
+    loader: DataLoader[CelebAResized] = DataLoader(
         dataset,
         batch_size=config.batch_size,
         shuffle=True,
     )
+    test_dataset = CelebAResized(root="./data", split="test", download=False)
+    test_loader: DataLoader[CelebAResized] = DataLoader(
+        test_dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+    )
+
     main_logger.info("Configuration loaded.\nConfiguration: %s", config)
     main_logger.info("Dataset loaded. Dataset size: %d", len(dataset))
 
@@ -59,22 +75,16 @@ def main() -> None:
     config.betas = betas.to(device)
     config.device = device
 
-    loss, model = train(
+    loss, _ = train(
         loader=loader,
+        test_loader=test_loader,
         config=config,
-        random_model=False,
+        random_model=args.test,
     )
 
-    test_dataset = MNISTResized(root="./data", train=False)
-    test_loader: DataLoader[MNISTResized] = DataLoader(
-        test_dataset,
-        batch_size=config.batch_size,
-        shuffle=True,
-    )
+    visualization = DiffusionVisualizer("./models/unet.pt", config, (128, 128))
 
-    visualization = DiffusionVisualizer(model, config, (28, 28))
-
-    visualization.plot_training_metrics({"MSE Loss": loss}, save_path="assets/loss.png")
+    visualization.plot_training_metrics({"L1 Loss": loss}, save_path="assets/loss.png")
     visualization.visualize_test_samples(
         test_loader=test_loader,
         save_dir="assets",
