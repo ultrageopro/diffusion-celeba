@@ -24,13 +24,13 @@ class Config:
 
     @classmethod
     def load(cls, path: Path | str) -> "Config":
-        """Load a configuration from a YAML file.
+        """Выгрузить конфигурацию из файла.
 
         Args:
-            path: The path to the file to load.
+            path: Путь к файлу конфигурации.
 
         Returns:
-            A Config object with the loaded values.
+            Config конфигурация
 
         """
         if isinstance(path, str):

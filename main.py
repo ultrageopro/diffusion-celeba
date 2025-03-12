@@ -33,6 +33,8 @@ def main() -> None:
     - Loads the configuration from a YAML file.
     - Initializes the CelebAResized dataset for the training split.
     - Creates a DataLoader for the dataset with the specified batch size and shuffling.
+    - Trains the diffusion model.
+    - Loads the trained model and tests it on the test split of the dataset.
 
     """
     config = Config.load("./config.yaml")

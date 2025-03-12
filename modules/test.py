@@ -24,12 +24,12 @@ class DiffusionVisualizer:
         config: Config,
         image_size: tuple[int, int] = (128, 128),
     ) -> None:
-        """Initialize the DiffusionVisualizer.
+        """Инициализация объекта DiffusionVisualizer.
 
         Args:
-            model_path: Path to the saved model.
-            config: Configuration object containing necessary parameters.
-            image_size: Tuple specifying the size of the images (width, height).
+            model_path: Путь к модели.
+            config: Конфигурация модели.
+            image_size: Размер целевого изображения.
 
         """
         checkpoint = torch.load(model_path, weights_only=False)
@@ -45,10 +45,10 @@ class DiffusionVisualizer:
         self._init_transforms()
 
     def _validate_config(self) -> None:
-        """Check required configuration parameters.
+        """Проверка конфигурации.
 
         Raises:
-            ValueError: If required configuration parameters are missing.
+            ValueError: Если параметры конфигурации отсутствуют.
 
         """
         required = ["alphas", "alphas_cumprod", "betas", "timesteps", "device"]
@@ -57,7 +57,7 @@ class DiffusionVisualizer:
             raise ValueError(msg)
 
     def _init_transforms(self) -> None:
-        """Initialize image transformation pipelines."""
+        """Инициализация преобразования для денормализации изображений."""
         batch_dim = 4
         self.denormalize = transforms.Compose([
             transforms.Lambda(lambda t: (t + 1) * 0.5),
@@ -75,17 +75,16 @@ class DiffusionVisualizer:
         *,
         return_process: bool = False,
     ) -> NDArray[np.float32] | list[NDArray[np.float32]]:
-        """Generate high-res image from low-res input.
+        """Апскейл.
 
         Args:
-            low_res: Input low-res image tensor [1, C, H, W]
-            return_process: Return all intermediate steps if True
+            low_res: Изображение низкого разрешения
+            return_process: Возвращать список промежуточных результатов
 
         Returns:
-            Generated high-res image or list of generation steps
+            NDArray[np.float32]: Сгенерированное изображение
 
         """
-        # Prepare inputs
         batch_size = low_res.size(0)
         low_res = low_res.to(self.config.device)
         x_t = torch.randn(
@@ -104,10 +103,9 @@ class DiffusionVisualizer:
                 dtype=torch.long,
             )
 
-            # Predict noise and denoise
             pred_noise = self.model(
                 noisy_image=x_t,
-                t=t_batch / self.config.timesteps,  # Normalized time
+                t=t_batch / self.config.timesteps,
                 low_res_image_interpolated=low_res,
             )
             x_t = denoise(
@@ -129,14 +127,13 @@ class DiffusionVisualizer:
         generated: NDArray[np.float32],
         save_path: str | None = None,
     ) -> None:
-        """Plot comparison of low-res, generated and target images.
+        """Визуализация.
 
         Args:
-            low_res: Low-res input image [C, H, W]
-            low_res_interpolated: Interpolated low-res image [C, H, W]
-            high_res: Target high-res image [C, H, W]
-            generated: Generated high-res image [H, W, C]
-            save_path: Path to save the plot (optional)
+            low_res: Изображение низкого разрешения [C, H, W]
+            high_res: Целевое изображение [C, H, W]
+            generated: Сгенерированное изображение [H, W, C]
+            save_path: Путь для сохранения (optional)
 
         """
         _, axes = plt.subplots(1, 3, figsize=(16, 5))
@@ -168,11 +165,11 @@ class DiffusionVisualizer:
         metrics: dict[str, list[float]],
         save_path: str | None = None,
     ) -> None:
-        """Plot training metrics.
+        """Построение графика ошибок.
 
         Args:
-            metrics: Dictionary with metric lists
-            save_path: Optional path to save the plot
+            metrics: Словарь с метриками
+            save_path: Путь для сохранения (optional)
 
         """
         plt.figure(figsize=(10, 6))
@@ -200,13 +197,13 @@ class DiffusionVisualizer:
         num_samples: int = 3,
         save_dir: str = "results",
     ) -> None:
-        """Visualize some test samples using the diffusion model.
+        """Финальная визуализация.
 
         Args:
-            test_loader (DataLoader[MNISTResized]): The test data loader
-            filename (str): The filename to save the visualizations
-            num_samples (int, optional): Number of samples to visualize. Defaults to 3.
-            save_dir (str, optional): Directory to save the visualizations.
+            test_loader (DataLoader[CelebAResized]): Dataloader с CelebA датасетом
+            filename (str): префикс имени файла
+            num_samples (int, optional): Количество примеров для визуализации.
+            save_dir (str, optional): Директория для сохранения.
 
         """
         test_batch, target_batch = next(iter(test_loader))

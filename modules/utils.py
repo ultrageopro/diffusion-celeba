@@ -13,39 +13,35 @@ def add_noise(
     alphas_cumprod: torch.Tensor,
     noise: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Add noise to `x` at time step `t`.
+    """Добавляет шум.
 
     Args:
-        x: The tensor to add noise to (shape: [B, C, H, W])
-        t: The time step indices (shape: [B]), must be torch.long
-        alphas_cumprod: Cumulative product of alphas (shape: [T])
-        noise: Optional noise tensor. Defaults to random normal
+        x: Тензор в который добавляется шум
+        t: Текущий таймстеп
+        alphas_cumprod: Кумулятивное произведение альфа до t
+        noise: Тензор шума
 
     Returns:
-        Tuple of noisy tensor and generated noise
+        Зашумленное изображение и сам шум
 
     Raises:
-        TypeError: If `t` is not torch.long
-        ValueError: If noise shape does not match input shape
+        TypeError: Если `t` не torch.long
+        ValueError: Проблема с размером шума
 
     """
-    # Validate input types
     if t.dtype != torch.long:
         msg = f"Time steps `t` must be long, got {t.dtype}"
         raise TypeError(msg)
 
-    # Generate noise if not provided
     if noise is None:
         noise = torch.randn_like(x)
     elif noise.shape != x.shape:
         msg = f"Noise shape {noise.shape} must match input shape {x.shape}"
         raise ValueError(msg)
 
-    # Extract coefficients for all batch elements
     sqrt_alpha_cumprod = torch.sqrt(alphas_cumprod[t]).view(-1, 1, 1, 1)
     sqrt_one_minus_alpha_cumprod = torch.sqrt(1 - alphas_cumprod[t]).view(-1, 1, 1, 1)
 
-    # Add noise with correct broadcasting
     noisy_x = sqrt_alpha_cumprod * x + sqrt_one_minus_alpha_cumprod * noise
 
     return noisy_x, noise
@@ -57,22 +53,21 @@ def denoise(
     t: torch.Tensor,
     x_t: torch.Tensor,
 ) -> torch.Tensor:
-    """Denoise the predicted noise (x_{t-1} calculation).
+    """Деноиз (расчет x_{t-1}).
 
     Args:
-        predicted_noise: Predicted noise tensor from model
-        config: Configuration object with noise schedule parameters
-        t: Current timestep tensor (shape: [batch])
-        x_t: Noisy image at timestep t (shape: [batch, channels, H, W])
+        predicted_noise: Тензор предсказанного шума
+        config: Конфигурация с параметрами расписания шума
+        t: Текущий таймстеп
+        x_t: Зашумленное изображение на шаге t
 
     Returns:
-        Denoised image x_{t-1}
+        Расчитанное изображение x_{t-1}
 
     Raises:
-        ValueError: If config parameters are missing
+        ValueError: Если параметры конфигурации отсутствуют
 
     """
-    # Validate config parameters
     msg = "Missing noise schedule parameters in config"
     if config.alphas is None or config.alphas_cumprod is None or config.betas is None:
         raise ValueError(msg)
