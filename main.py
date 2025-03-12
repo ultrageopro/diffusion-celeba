@@ -86,7 +86,7 @@ def main() -> None:
 
     visualization = DiffusionVisualizer("./models/unet.pt", config, (128, 128))
 
-    visualization.plot_training_metrics({"L1 Loss": loss}, save_path="assets/loss.png")
+    visualization.plot_training_metrics({"MSE Loss": loss}, save_path="assets/loss.png")
     visualization.visualize_test_samples(
         test_loader=test_loader,
         save_dir="assets",
