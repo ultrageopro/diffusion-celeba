@@ -12,7 +12,7 @@ from torchvision import transforms
 from tqdm.auto import tqdm
 
 from modules.config import Config
-from modules.loader import MNISTResized
+from modules.loader import CelebAResized
 from modules.model import UNet
 from modules.utils import denoise
 
@@ -192,7 +192,7 @@ class DiffusionVisualizer:
 
     def visualize_test_samples(
         self,
-        test_loader: DataLoader[MNISTResized],
+        test_loader: DataLoader[CelebAResized],
         filename: str,
         num_samples: int = 3,
         save_dir: str = "results",
