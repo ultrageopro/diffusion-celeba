@@ -127,7 +127,10 @@ def get_beta_schedule(
         for i in range(num_timesteps):
             t1 = i / num_timesteps
             t2 = (i + 1) / num_timesteps
-            betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), 0.999))
+            ratio = alpha_bar(t2) / alpha_bar(t1)
+            beta = min(1 - ratio, 0.999)
+            betas.append(beta)
+
         return torch.tensor(betas)
 
     msg = f"Unknown schedule type: {schedule_type}"

@@ -24,6 +24,7 @@ lint.ignore = [
     "CPY",
     "D102",
     "D107",
+    "RUF002",
 ] # Im not sure i want to explain all of this
 
 preview = true # Enable preview features

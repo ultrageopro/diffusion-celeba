@@ -15,6 +15,59 @@ from .model import UNet
 from .utils import add_noise
 
 
+def get_optimizer(config: Config, model: nn.Module) -> optim.Optimizer:
+    """Get optimizer.
+
+    Args:
+        config: Конфигурация
+        model: Модель
+
+    Returns:
+        Оптимизатор
+
+    Raises:
+        NotImplementedError: Пока не имплементировано
+
+    """
+    match config.optimizer:
+        case "AdamW":
+            return optim.AdamW(
+                model.parameters(),
+                lr=config.lr,
+                weight_decay=config.weight_decay,
+            )
+        case _:
+            raise NotImplementedError
+
+
+def get_scheduler(
+    config: Config,
+    optimizer: optim.Optimizer,
+) -> optim.lr_scheduler.LRScheduler:
+    """Get scheduler.
+
+    Args:
+        config: Конфигурация
+        optimizer: Оптимизатор
+
+    Returns:
+        Схема смены скорости обучения
+
+    Raises:
+        NotImplementedError: Пока не имплементировано
+
+    """
+    match config.lr_scheduler:
+        case "CosineAnnealingLR":
+            return optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=config.num_epochs,
+                eta_min=1e-6,
+            )
+        case _:
+            raise NotImplementedError
+
+
 def train(  # noqa: PLR0914
     loader: DataLoader[CelebAResized],
     test_loader: DataLoader[CelebAResized],
@@ -50,16 +103,9 @@ def train(  # noqa: PLR0914
         logger.info("Returning random initialized model")
         return [], model
 
-    optimizer = optim.AdamW(
-        model.parameters(),
-        lr=config.lr,
-        weight_decay=config.weight_decay,
-    )
+    optimizer = get_optimizer(config, model)
     criterion = torch.nn.MSELoss()
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer,
-        T_max=config.num_epochs,
-    )
+    scheduler = get_scheduler(config, optimizer)
 
     logger.info("Training configuration:")
     logger.info("Device: %s", config.device)
@@ -96,16 +142,18 @@ def train(  # noqa: PLR0914
             )
 
             optimizer.zero_grad()
+
             pred_noise = model(
-                t=t.float() / config.timesteps,  # Normalized time
-                low_res_image_interpolated=low_res_interpolated,  # Low-res as input
-                noisy_image=noisy_images,  # Noisy high-res as conditioning
+                t=t.float() / config.timesteps,
+                low_res_image_interpolated=low_res_interpolated,
+                noisy_image=noisy_images,
             )
 
             loss = criterion(pred_noise, noise)
+
             loss.backward()
 
-            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
             optimizer.step()
 
             progress.set_postfix(loss=f"{loss.item():.4f}")

@@ -17,6 +17,9 @@ class Config:
     batch_size: int
     num_epochs: int
     timesteps: int
+    grad_clip: float
+    optimizer: str
+    lr_scheduler: str
     alphas: torch.Tensor | None = None
     betas: torch.Tensor | None = None
     alphas_cumprod: torch.Tensor | None = None
@@ -41,5 +44,6 @@ class Config:
             model_params["beta_start"] = float(model_params["beta_start"])
             model_params["beta_end"] = float(model_params["beta_end"])
             model_params["weight_decay"] = float(model_params["weight_decay"])
+            model_params["grad_clip"] = float(model_params["grad_clip"])
 
             return cls(**model_params)
