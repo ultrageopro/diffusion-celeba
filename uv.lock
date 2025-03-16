@@ -111,6 +111,8 @@ source = { virtual = "." }
 dependencies = [
     { name = "gdown" },
     { name = "matplotlib" },
+    { name = "onnx" },
+    { name = "onnxscript" },
     { name = "pre-commit" },
     { name = "pyyaml" },
     { name = "torch" },
@@ -123,6 +125,8 @@ dependencies = [
 requires-dist = [
     { name = "gdown", specifier = ">=5.2.0" },
     { name = "matplotlib", specifier = ">=3.10.1" },
+    { name = "onnx", specifier = ">=1.17.0" },
+    { name = "onnxscript", specifier = ">=0.2.2" },
     { name = "pre-commit", specifier = ">=4.1.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "torch", specifier = ">=2.6.0" },
@@ -316,6 +320,24 @@ wheels = [
 ]
 
 [[package]]
+name = "ml-dtypes"
+version = "0.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/32/49/6e67c334872d2c114df3020e579f3718c333198f8312290e09ec0216703a/ml_dtypes-0.5.1.tar.gz", hash = "sha256:ac5b58559bb84a95848ed6984eb8013249f90b6bab62aa5acbad876e256002c9", size = 698772 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/92/bb6a3d18e16fddd18ce6d5f480e1919b33338c70e18cba831c6ae59812ee/ml_dtypes-0.5.1-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:12651420130ee7cc13059fc56dac6ad300c3af3848b802d475148c9defd27c23", size = 667696 },
+    { url = "https://files.pythonhosted.org/packages/6d/29/cfc89d842767e9a51146043b0fa18332c2b38f8831447e6cb1160e3c6102/ml_dtypes-0.5.1-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c9945669d3dadf8acb40ec2e57d38c985d8c285ea73af57fc5b09872c516106d", size = 4638365 },
+    { url = "https://files.pythonhosted.org/packages/be/26/adc36e3ea09603d9f6d114894e1c1b7b8e8a9ef6d0b031cc270c6624a37c/ml_dtypes-0.5.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:bf9975bda82a99dc935f2ae4c83846d86df8fd6ba179614acac8e686910851da", size = 4702722 },
+    { url = "https://files.pythonhosted.org/packages/da/8a/a2b9375c94077e5a488a624a195621407846f504068ce22ccf805c674156/ml_dtypes-0.5.1-cp313-cp313-win_amd64.whl", hash = "sha256:fd918d4e6a4e0c110e2e05be7a7814d10dc1b95872accbf6512b80a109b71ae1", size = 210850 },
+    { url = "https://files.pythonhosted.org/packages/52/38/703169100fdde27957f061d4d0ea3e00525775a09acaccf7e655d9609d55/ml_dtypes-0.5.1-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:05f23447a1c20ddf4dc7c2c661aa9ed93fcb2658f1017c204d1e758714dc28a8", size = 693043 },
+    { url = "https://files.pythonhosted.org/packages/28/ff/4e234c9c23e0d456f5da5a326c103bf890c746d93351524d987e41f438b3/ml_dtypes-0.5.1-cp313-cp313t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1b7fbe5571fdf28fd3aaab3ef4aafc847de9ebf263be959958c1ca58ec8eadf5", size = 4903946 },
+    { url = "https://files.pythonhosted.org/packages/b7/45/c1a1ccfdd02bc4173ca0f4a2d327683a27df85797b885eb1da1ca325b85c/ml_dtypes-0.5.1-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d13755f8e8445b3870114e5b6240facaa7cb0c3361e54beba3e07fa912a6e12b", size = 5052731 },
+]
+
+[[package]]
 name = "mpmath"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -489,6 +511,32 @@ wheels = [
 ]
 
 [[package]]
+name = "onnx"
+version = "1.17.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9a/54/0e385c26bf230d223810a9c7d06628d954008a5e5e4b73ee26ef02327282/onnx-1.17.0.tar.gz", hash = "sha256:48ca1a91ff73c1d5e3ea2eef20ae5d0e709bb8a2355ed798ffc2169753013fd3", size = 12165120 }
+
+[[package]]
+name = "onnxscript"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ml-dtypes" },
+    { name = "numpy" },
+    { name = "onnx" },
+    { name = "packaging" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/80/7c/07ed54f63f3e9f190bb7009e420bf12cf90b3d151b92dd12609dab5ef260/onnxscript-0.2.2.tar.gz", hash = "sha256:bc615a87757471b269774f0d4b9a61d6b0d601b40cf86a1e368fba2891dec5d4", size = 602154 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/73/8f/6630be8dd2f9f1e1dadf9402019bb2f0ddbfcd7c668d079f00dfb89829d2/onnxscript-0.2.2-py3-none-any.whl", hash = "sha256:fac509771075537042b81ff31579abe9e91cd0ccbd3eefed655e52fcf0254cc6", size = 694942 },
+]
+
+[[package]]
 name = "packaging"
 version = "24.2"
 source = { registry = "https://pypi.org/simple" }
@@ -547,6 +595,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2a/13/b62d075317d8686071eb843f0bb1f195eb332f48869d3c31a4c6f1e063ac/pre_commit-4.1.0.tar.gz", hash = "sha256:ae3f018575a588e30dfddfab9a05448bfbd6b73d78709617b5a2b853549716d4", size = 193330 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/43/b3/df14c580d82b9627d173ceea305ba898dca135feb360b6d84019d0803d3b/pre_commit-4.1.0-py2.py3-none-any.whl", hash = "sha256:d29e7cb346295bcc1cc75fc3e92e343495e3ea0196c9ec6ba53f49f10ab6ae7b", size = 220560 },
+]
+
+[[package]]
+name = "protobuf"
+version = "6.30.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/55/de/8216061897a67b2ffe302fd51aaa76bbf613001f01cd96e2416a4955dd2b/protobuf-6.30.1.tar.gz", hash = "sha256:535fb4e44d0236893d5cf1263a0f706f1160b689a7ab962e9da8a9ce4050b780", size = 429304 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/f6/28460c49a8a93229e2264cd35fd147153fb524cbd944789db6b6f3cc9b13/protobuf-6.30.1-cp310-abi3-win32.whl", hash = "sha256:ba0706f948d0195f5cac504da156d88174e03218d9364ab40d903788c1903d7e", size = 419150 },
+    { url = "https://files.pythonhosted.org/packages/96/82/7045f5b3f3e338a8ab5852d22ce9c31e0a40d8b0f150a3735dc494be769a/protobuf-6.30.1-cp310-abi3-win_amd64.whl", hash = "sha256:ed484f9ddd47f0f1bf0648806cccdb4fe2fb6b19820f9b79a5adf5dcfd1b8c5f", size = 431007 },
+    { url = "https://files.pythonhosted.org/packages/b0/b6/732d04d0cdf457d05b7cba83ae73735d91ceced2439735b4500e311c44a5/protobuf-6.30.1-cp39-abi3-macosx_10_9_universal2.whl", hash = "sha256:aa4f7dfaed0d840b03d08d14bfdb41348feaee06a828a8c455698234135b4075", size = 417579 },
+    { url = "https://files.pythonhosted.org/packages/fc/22/29dd085f6e828ab0424e73f1bae9dbb9e8bb4087cba5a9e6f21dc614694e/protobuf-6.30.1-cp39-abi3-manylinux2014_aarch64.whl", hash = "sha256:47cd320b7db63e8c9ac35f5596ea1c1e61491d8a8eb6d8b45edc44760b53a4f6", size = 317319 },
+    { url = "https://files.pythonhosted.org/packages/26/10/8863ba4baa4660e3f50ad9ae974c47fb63fa6d4089b15f7db82164b1c879/protobuf-6.30.1-cp39-abi3-manylinux2014_x86_64.whl", hash = "sha256:e3083660225fa94748ac2e407f09a899e6a28bf9c0e70c75def8d15706bf85fc", size = 316213 },
+    { url = "https://files.pythonhosted.org/packages/a1/d6/683a3d470398e45b4ad9b6c95b7cbabc32f9a8daf454754f0e3df1edffa6/protobuf-6.30.1-py3-none-any.whl", hash = "sha256:3c25e51e1359f1f5fa3b298faa6016e650d148f214db2e47671131b9063c53be", size = 167064 },
 ]
 
 [[package]]

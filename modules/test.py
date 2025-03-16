@@ -32,7 +32,11 @@ class DiffusionVisualizer:
             image_size: Размер целевого изображения.
 
         """
-        checkpoint = torch.load(model_path, weights_only=False)
+        checkpoint = torch.load(
+            model_path,
+            weights_only=False,
+            map_location=config.device,
+        )
         self.model = UNet()
         self.model.load_state_dict(checkpoint["model"])
         self.model.to(config.device)

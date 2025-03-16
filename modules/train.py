@@ -68,7 +68,7 @@ def get_scheduler(
             raise NotImplementedError
 
 
-def train(  # noqa: PLR0914
+def train(  # noqa: PLR0914, PLR0915
     loader: DataLoader[CelebAResized],
     test_loader: DataLoader[CelebAResized],
     config: Config,
@@ -89,6 +89,7 @@ def train(  # noqa: PLR0914
 
     Raises:
         ValueError: Если не переданы некоторые параметры в конфигурации
+        RuntimeError: Если не удалось экспортировать модель
 
     """
     logger = logging.getLogger(__name__)
@@ -100,7 +101,18 @@ def train(  # noqa: PLR0914
     model = UNet().to(config.device)
 
     if random_model:
-        logger.info("Returning random initialized model")
+        logger.info("Returning and saving random initialized model to onnx file")
+        inputs = (
+            torch.randn(1, 3, 128, 128).to(config.device),
+            torch.randn(1, 3, 128, 128).to(config.device),
+            torch.randn(1).to(config.device),
+        )
+        onnx_program = torch.onnx.export(model, inputs, dynamo=True)
+        if onnx_program is None:
+            msg = "Failed to export model to onnx"
+            raise RuntimeError(msg)
+
+        onnx_program.save("models/random_model.onnx")
         return [], model
 
     optimizer = get_optimizer(config, model)

@@ -11,3 +11,4 @@ wheels/
 .mypy_cache
 data
 assets/
+.ruff_cache
