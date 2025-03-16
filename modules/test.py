@@ -7,6 +7,7 @@ import torch
 from matplotlib import animation
 from matplotlib import pyplot as plt
 from numpy.typing import NDArray
+from PIL import Image
 from torch.nn import functional as torch_f
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -64,6 +65,14 @@ class DiffusionVisualizer:
     def _init_transforms(self) -> None:
         """Инициализация преобразования для денормализации изображений."""
         batch_dim = 4
+        self.prepare = transforms.Compose([
+            transforms.Resize((self.image_size[0] // 2, self.image_size[1] // 2)),
+            transforms.ToTensor(),
+            transforms.Lambda(lambda t: t.to(torch.float32)),
+            transforms.Lambda(lambda t: t.unsqueeze(0)),
+            transforms.Lambda(lambda t: t * 2 - 1),
+        ])
+
         self.denormalize = transforms.Compose([
             transforms.Lambda(lambda t: (t + 1) * 0.5),
             transforms.Lambda(lambda t: t.squeeze(0) if t.dim() == batch_dim else t),
@@ -164,6 +173,29 @@ class DiffusionVisualizer:
             plt.close()
         else:
             plt.show()
+
+    def plot_custom_input(self, path: str, save_path: str) -> None:
+        tensor_img = self.prepare(Image.open(path))
+        tensor_img = tensor_img.to(self.config.device)
+        tensor_img_interpolated = torch_f.interpolate(
+            tensor_img,
+            size=self.image_size,
+            mode="bicubic",
+        )
+
+        fig, ax = plt.subplots(1, 2, figsize=(16, 5))
+
+        processed = self.sample(tensor_img_interpolated)
+
+        ax[0].imshow(self.denormalize(tensor_img))
+        ax[0].axis("off")
+        ax[0].set_title("Low Resolution (input, 64x64)")
+
+        ax[1].imshow(processed)
+        ax[1].axis("off")
+        ax[1].set_title("Generated (128x128)")
+
+        fig.savefig(save_path)
 
     @staticmethod
     def plot_training_metrics(

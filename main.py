@@ -92,6 +92,7 @@ def main() -> None:
         save_dir="assets",
         filename="final",
     )
+    visualization.plot_custom_input("assets/test.jpg", "assets/input.png")
     visualization.visualize_process(
         test_loader=test_loader,
         filename="final",
