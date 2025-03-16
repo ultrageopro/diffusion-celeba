@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from matplotlib import animation
 from matplotlib import pyplot as plt
 from numpy.typing import NDArray
 from torch.nn import functional as torch_f
@@ -193,6 +194,66 @@ class DiffusionVisualizer:
             plt.close()
         else:
             plt.show()
+
+    def visualize_process(
+        self,
+        test_loader: DataLoader[CelebAResized],
+        filename: str,
+        save_dir: str = "results",
+    ) -> None:
+        """Анимация расшумления.
+
+        Args:
+            test_loader (DataLoader[CelebAResized]): Dataloader с CelebA датасетом
+            filename (str): префикс имени файла
+            save_dir (str, optional): Директория для сохранения.
+
+        """
+        test_batch, target_batch = next(iter(test_loader))
+
+        # Выбираем первый пример
+        test_image = test_batch[0].unsqueeze(0).to(self.config.device)
+        target_image = target_batch[0].unsqueeze(0).to(self.config.device)
+
+        test_img_interpolated = torch_f.interpolate(
+            test_image.to(self.config.device),
+            size=target_image.shape[2:],
+            mode="bicubic",
+        )
+
+        process = self.sample(
+            low_res=test_img_interpolated,
+            return_process=True,
+        )
+
+        # Создаем директорию для сохранения
+        Path(save_dir).mkdir(exist_ok=True)
+        fig, ax = plt.subplots(1, 3, figsize=(16, 5))
+
+        def animate(i: int) -> None:
+            ax[0].cla()
+            ax[1].cla()
+            ax[2].cla()
+
+            ax[0].imshow(self.denormalize(test_image))
+            ax[1].imshow(process[i])
+            ax[2].imshow(self.denormalize(target_image))
+
+            ax[0].axis("off")
+            ax[1].axis("off")
+            ax[2].axis("off")
+
+            ax[0].set_title("Low Resolution (input, 64x64)")
+            ax[1].set_title("Generated (128x128)")
+            ax[2].set_title("High Resolution (target, 128x128)")
+
+        anim = animation.FuncAnimation(
+            fig,
+            animate,  # type: ignore[arg-type]
+            frames=len(process),
+            interval=1000 / 60,
+        )
+        anim.save(f"{save_dir}/{filename}-process.gif", writer="pillow", fps=30)
 
     def visualize_test_samples(
         self,

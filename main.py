@@ -92,6 +92,11 @@ def main() -> None:
         save_dir="assets",
         filename="final",
     )
+    visualization.visualize_process(
+        test_loader=test_loader,
+        filename="final",
+        save_dir="assets",
+    )
 
 
 if __name__ == "__main__":
