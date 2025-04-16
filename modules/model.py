@@ -58,66 +58,80 @@ class ResBlock(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, image_size: tuple[int, int] = (28, 28)) -> None:
+    def __init__(
+        self,
+        model_size: int = 1,
+    ) -> None:
         """Initialize the UNet."""
         super().__init__()
         # Уменьшенные embedding dimensions
         self.time_embed = nn.Sequential(
-            TimeEmbedding(64),
-            nn.Linear(64, 64),
+            TimeEmbedding(16 * model_size),
+            nn.Linear(16 * model_size, 16 * model_size),
             nn.GELU(),
         )
-        self.image_size = image_size
 
         # Оптимизированный encoder
         self.enc1 = nn.Sequential(
-            nn.Conv2d(6, 32, kernel_size=3, padding=1),
-            ResBlock(32),
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(6, 8 * model_size, kernel_size=3, padding=1),
+            ResBlock(8 * model_size),
+            nn.Conv2d(
+                8 * model_size,
+                8 * model_size,
+                kernel_size=3,
+                stride=2,
+                padding=1,
+            ),
         )
 
         self.enc2 = nn.Sequential(
-            ResBlock(32),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            ResBlock(8 * model_size),
+            nn.Conv2d(
+                8 * model_size,
+                16 * model_size,
+                kernel_size=3,
+                stride=2,
+                padding=1,
+            ),
         )
 
         # Упрощенный bottleneck
         self.bottleneck = nn.Sequential(
-            ResBlock(64),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            nn.GroupNorm(4, 64),
+            ResBlock(16 * model_size),
+            nn.Conv2d(16 * model_size, 16 * model_size, kernel_size=3, padding=1),
+            nn.GroupNorm(4, 16 * model_size),
             nn.GELU(),
         )
 
         # Эффективный decoder
         self.dec1 = nn.Sequential(
             nn.ConvTranspose2d(
-                64 + 64,
-                32,
+                16 * model_size + 16 * model_size,
+                8 * model_size,
                 kernel_size=3,
                 stride=2,
                 padding=1,
                 output_padding=1,
             ),
-            ResBlock(32),
+            ResBlock(8 * model_size),
         )
 
         self.dec2 = nn.Sequential(
             nn.ConvTranspose2d(
-                32 + 32,
-                32,
+                8 * model_size + 8 * model_size,
+                8 * model_size,
                 kernel_size=3,
                 stride=2,
                 padding=1,
                 output_padding=1,
             ),
-            ResBlock(32),
+            ResBlock(8 * model_size),
         )
 
         self.final = nn.Sequential(
-            nn.Conv2d(32, 16, kernel_size=3, padding=1),
+            nn.Conv2d(8 * model_size, 8 * model_size, kernel_size=3, padding=1),
             nn.GELU(),
-            nn.Conv2d(16, 3, kernel_size=3, padding=1),
+            nn.Conv2d(4 * model_size, 3, kernel_size=3, padding=1),
         )
 
     def forward(
