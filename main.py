@@ -11,6 +11,7 @@ from modules.loader import CelebAResized
 from modules.test import DiffusionVisualizer
 from modules.train import train
 from modules.utils import get_beta_schedule
+from modules.metrics import MetricsCounter
 
 main_logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -39,7 +40,7 @@ def main() -> None:
     """
     config = Config.load("./config.yaml")
     args = parser.parse_args()
-    dataset = CelebAResized(root="./data", split="train", download=True)
+    dataset = CelebAResized(root="./data", split="train", download=False)
     loader: DataLoader[CelebAResized] = DataLoader(
         dataset,
         batch_size=config.batch_size,
@@ -77,6 +78,8 @@ def main() -> None:
     config.betas = betas.to(device)
     config.device = device
 
+    main_logger.info(f"Use device: {device}")
+
     loss, _ = train(
         loader=loader,
         test_loader=test_loader,
@@ -86,17 +89,23 @@ def main() -> None:
 
     visualization = DiffusionVisualizer("./models/unet.pt", config, (128, 128))
 
-    visualization.plot_training_metrics({"MSE Loss": loss}, save_path="assets/loss.png")
-    visualization.visualize_test_samples(
-        test_loader=test_loader,
-        save_dir="assets",
-        filename="final",
-    )
-    visualization.plot_custom_input("assets/test.jpg", "assets/input.png")
-    visualization.visualize_process(
-        test_loader=test_loader,
-        filename="final",
-        save_dir="assets",
+    # visualization.plot_training_metrics({"MSE Loss": loss}, save_path="assets/loss.png")
+    # visualization.visualize_test_samples(
+    #     test_loader=test_loader,
+    #     save_dir="assets",
+    #     filename="final",
+    # )
+    # visualization.plot_custom_input("assets/test.jpg", "assets/input.png")
+    # visualization.visualize_process(
+    #     test_loader=test_loader,
+    #     filename="final",
+    #     save_dir="assets",
+    # )
+    main_logger.info(f"Start count metrics")
+    counter = MetricsCounter("./models/unet.pt", config, )
+    counter.count_metrics(
+        test_loader,
+        "metrics",
     )
 
 
