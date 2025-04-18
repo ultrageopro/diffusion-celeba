@@ -9,6 +9,7 @@ import yaml
 
 @dataclass()
 class Config:
+    model_size: int
     lr: float
     beta_start: float
     beta_end: float

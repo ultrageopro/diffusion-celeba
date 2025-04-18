@@ -10,3 +10,4 @@ model:
   grad_clip: 1.0
   optimizer: "AdamW"
   lr_scheduler: "CosineAnnealingLR"
+  model_size: 4

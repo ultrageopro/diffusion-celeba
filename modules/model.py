@@ -129,9 +129,9 @@ class UNet(nn.Module):
         )
 
         self.final = nn.Sequential(
-            nn.Conv2d(8 * model_size, 8 * model_size, kernel_size=3, padding=1),
-            nn.GELU(),
-            nn.Conv2d(4 * model_size, 3, kernel_size=3, padding=1),
+            nn.Conv2d(8 * model_size, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 3, kernel_size=3, padding=1),
         )
 
     def forward(

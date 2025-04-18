@@ -72,6 +72,7 @@ def train(  # noqa: PLR0914, PLR0915
     loader: DataLoader[CelebAResized],
     test_loader: DataLoader[CelebAResized],
     config: Config,
+    save_path: str,
     *,
     random_model: bool = False,
 ) -> tuple[list[float], UNet]:
@@ -81,6 +82,7 @@ def train(  # noqa: PLR0914, PLR0915
         loader: Dataloader с CelebA датасетом
         test_loader: Dataloader с CelebA датасетом (тестовая выборка)
         config: Конфигурация
+        save_path: Путь к модели
         random_model: Создать случайную модель (без обучения)
 
     Returns:
@@ -98,8 +100,7 @@ def train(  # noqa: PLR0914, PLR0915
         msg = "Missing required configuration parameters"
         raise ValueError(msg)
 
-    model = UNet().to(config.device)
-
+    model = UNet(model_size=config.model_size).to(config.device)
     if random_model:
         logger.info("Returning and saving random initialized model to onnx file")
         inputs = (
@@ -169,8 +170,7 @@ def train(  # noqa: PLR0914, PLR0915
             optimizer.step()
 
             progress.set_postfix(loss=f"{loss.item():.4f}")
-
-        loss_history.append(loss.item())
+            loss_history.append(loss.item())
 
         model.eval()
         eval_loss: list[float] = []
@@ -214,8 +214,7 @@ def train(  # noqa: PLR0914, PLR0915
             sum(eval_loss) / len(eval_loss),
         )
 
-    save_path = Path("./models/unet.pt")
-    save_path.parent.mkdir(exist_ok=True)
+    Path(save_path).parent.mkdir(exist_ok=True)
     torch.save(
         {
             "model": model.state_dict(),
